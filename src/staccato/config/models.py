@@ -1,61 +1,65 @@
-from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 from typing import Literal
 
-class LLMConfig(BaseModel):
+class LLMConfig(BaseSettings):
     """Configuration for the Language Model provider."""
-    provider: Literal["openai", "anthropic", "mock"] = Field(
+    provider: Literal["openai", "mock"] = Field(
         default="openai",
         description="The LLM provider to use."
     )
     model_name: str = Field(
-        default="gpt-4-turbo",
+        default="gpt-4.1-mini",
         description="The specific model name to use for chunking."
     )
     temperature: float = Field(
-        default=0.0,
+        default=0.7,
         description="The sampling temperature for the LLM."
     )
     max_tokens: int = Field(
-        default=2048,
+        default=16384,
         description="The maximum number of tokens to generate."
     )
 
-class RetryConfig(BaseModel):
-    """Configuration for API call retry logic."""
-    max_retries: int = Field(
+class RetryConfig(BaseSettings):
+    """Configuration for the LLM API retry logic."""
+    attempts: int = Field(
         default=3,
-        description="Maximum number of retries for a failed API call."
+        description="The maximum number of times to retry a failed LLM API call."
     )
-    backoff_factor: float = Field(
-        default=2.0,
-        description="Factor by which to increase delay between retries."
-    )
+    min_wait: int = Field(default=1, description="The initial wait time in seconds.")
+    max_wait: int = Field(default=10, description="The maximum wait time in seconds.")
+    wait_multiplier: int = Field(default=2, description="The multiplier for exponential backoff.")
 
-class PreprocessingConfig(BaseModel):
-    """Configuration for the document pre-processing stage."""
-    pdf_parser: Literal["pdfplumber", "pymupdf", "pypdf"] = Field(
-        default="pdfplumber",
-        description="The library to use for parsing PDF documents."
+class PreprocessingConfig(BaseSettings):
+    """Configuration for the pre-processing stage."""
+    use_layout_analysis: bool = Field(
+        True,
+        description="Whether to use layout analysis for richer markdown conversion."
     )
     page_batch_size: int = Field(
         default=3,
         description="Number of pages to batch together for a single LLM call."
     )
-    use_layout_analysis: bool = Field(
-        default=True,
-        description="Whether to use visual/layout cues in pre-processing."
+    pdf_processor: Literal["pdfplumber", "pymupdf4llm"] = Field(
+        default="pdfplumber",
+        description="The PDF processor to use. 'pymupdf4llm' provides better markdown formatting."
     )
 
-class ChunkingEngineConfig(BaseModel):
+class ChunkingEngineConfig(BaseSettings):
     """
     Master configuration for the Staccato Chunking Engine.
-    This model holds all tunable parameters for the chunking process.
+    This model loads settings from a 'staccato.toml' file and environment variables.
     """
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="STACCATO_",
+        env_nested_delimiter="__",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
     llm: LLMConfig = Field(default_factory=LLMConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)
-    preprocessing: PreprocessingConfig = Field(default_factory=PreprocessingConfig)
-
-    class Config:
-        # This allows for nested models to be loaded from environment variables
-        # e.g., STACCATO_LLM__PROVIDER='anthropic'
-        nested_model_separator = "__" 
+    preprocessing: PreprocessingConfig = Field(default_factory=PreprocessingConfig) 

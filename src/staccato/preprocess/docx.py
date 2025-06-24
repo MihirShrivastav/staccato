@@ -1,13 +1,16 @@
 from ..preprocess.base import PreProcessor, Page, Block
 from typing import List
 import importlib.util
+from ..config import PreprocessingConfig
+import unicodedata
 
 class DocxPreProcessor(PreProcessor):
     """
     A pre-processor implementation that uses the `python-docx` library
     to extract content from .docx documents.
     """
-    def __init__(self):
+    def __init__(self, config: PreprocessingConfig):
+        super().__init__(config)
         if importlib.util.find_spec("docx") is None:
             raise ImportError(
                 "The 'python-docx' library is required for this pre-processor. "
@@ -16,37 +19,34 @@ class DocxPreProcessor(PreProcessor):
         import docx
         self.docx = docx
 
-    def extract_pages(self, document_path: str) -> List[Page]:
+    def extract_pages(self, file_path: str) -> List[Page]:
         """
         Extracts content from a .docx file.
         Since .docx is a flowing format without fixed pages, the entire
         document is treated as a single 'page'.
         """
-        doc = self.docx.Document(document_path)
+        from docx import Document
         
-        full_text: List[str] = []
-        blocks: List[Block] = []
+        document = Document(file_path)
         
-        for para in doc.paragraphs:
-            if para.text.strip():
-                full_text.append(para.text)
-                
-                # Treat each paragraph as a block
-                # Bbox and font size are placeholders
-                blocks.append(Block(
-                    text=para.text,
-                    bbox=(0, 0, 0, 0),
-                    font_size=12,  # Assume default font size
-                    font_weight="bold" if self._is_bold(para) else "normal",
-                ))
-
-        # The entire document is treated as one page
+        # In DOCX, we treat the entire document as one "page" for simplicity.
+        # A more advanced implementation could try to split by actual page breaks.
+        full_text = "\n".join([para.text for para in document.paragraphs])
+        normalized_text = unicodedata.normalize("NFKC", full_text)
+        
+        # Since we don't have page/block structure, we create one page with one block.
         page = Page(
             page_number=1,
-            text="\n".join(full_text),
-            blocks=blocks,
+            text=normalized_text,
+            blocks=[
+                Block(
+                    text=normalized_text,
+                    bbox=(0, 0, 0, 0),  # No bbox available
+                    font_size=0,         # No font size available
+                    font_weight="normal"
+                )
+            ]
         )
-        
         return [page]
 
     def _is_bold(self, paragraph) -> bool:

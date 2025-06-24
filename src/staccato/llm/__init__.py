@@ -6,24 +6,25 @@ Large Language Models and a factory to get the correct adapter based on config.
 """
 from ..config import LLMConfig
 from .base import LLMAdapter
+from ..config import ChunkingEngineConfig
 
-def get_llm_adapter(config: LLMConfig) -> LLMAdapter:
+def get_llm_adapter(config: ChunkingEngineConfig) -> LLMAdapter:
     """
     Factory function to get the appropriate LLM adapter.
 
     Args:
-        config: The LLM configuration.
+        config: The main chunking engine configuration object.
 
     Returns:
         An instance of an LLMAdapter subclass.
     """
-    provider = config.provider
+    provider = config.llm.provider
     if provider == "mock":
         from .mock import MockLLMAdapter
-        return MockLLMAdapter()
+        return MockLLMAdapter(config.retry)
     elif provider == "openai":
         from .openai import OpenAIAdapter
-        return OpenAIAdapter(config)
+        return OpenAIAdapter(config.llm, config.retry)
     # Add other providers here as they are implemented
     # elif provider == "anthropic":
     else:

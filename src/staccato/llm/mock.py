@@ -1,5 +1,6 @@
 import json
 from ..llm.base import LLMAdapter
+from ..config import RetryConfig
 
 # A pre-defined, structured response to simulate the real LLM's output.
 # This helps in developing and testing the downstream components (like the Stitcher)
@@ -21,10 +22,17 @@ class MockLLMAdapter(LLMAdapter):
     A mock LLM adapter for testing and development.
     It returns a pre-defined, structured JSON response.
     """
-    def generate(self, prompt: str, *, max_tokens: int, temperature: float) -> str:
+    def __init__(self, retry_config: RetryConfig = None):
+        super().__init__(retry_config)
+
+    def generate(self, system_prompt: str, user_prompt: str, *, max_tokens: int, temperature: float) -> str:
         """
         Returns a mock JSON response, ignoring the prompt and other parameters.
         """
+        return json.dumps(MOCK_LLM_RESPONSE)
+
+    async def agenerate(self, system_prompt: str, user_prompt: str, *, max_tokens: int, temperature: float) -> str:
+        """Returns a mock JSON response asynchronously."""
         return json.dumps(MOCK_LLM_RESPONSE)
 
     def count_tokens(self, text: str) -> int:
