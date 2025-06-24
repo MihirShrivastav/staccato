@@ -43,10 +43,51 @@ class StatefulStitcher:
                 continue
             
             try:
-                index = page_content.find(event.fingerprint)
-                if index == -1:
-                    logger.warning("Fingerprint not found on page, skipping event.", fingerprint=event.fingerprint, page=page_num)
+                # Strip whitespace from fingerprint for more robust matching
+                stripped_fingerprint = event.fingerprint.strip()
+                if not stripped_fingerprint:
+                    logger.warning("Empty fingerprint after stripping, skipping.", event_data=event.model_dump_json())
                     continue
+                
+                # First try exact match
+                index = page_content.find(event.fingerprint)
+                
+                # If exact match fails, try with stripped versions
+                if index == -1:
+                    # Create a stripped version of page content and search in chunks
+                    # to handle whitespace differences while preserving original positions
+                    lines = page_content.split('\n')
+                    current_pos = 0
+                    found = False
+                    
+                    for line in lines:
+                        stripped_line = line.strip()
+                        if stripped_fingerprint in stripped_line:
+                            # Find the position within the original line
+                            line_start_in_content = current_pos
+                            stripped_index_in_line = stripped_line.find(stripped_fingerprint)
+                            
+                            # Map back to original content position
+                            # Count non-stripped characters before the match
+                            original_index_in_line = 0
+                            stripped_chars_counted = 0
+                            for char in line:
+                                if char.strip():  # Non-whitespace character
+                                    if stripped_chars_counted == stripped_index_in_line:
+                                        break
+                                    stripped_chars_counted += 1
+                                original_index_in_line += 1
+                            
+                            index = line_start_in_content + original_index_in_line
+                            found = True
+                            break
+                        current_pos += len(line) + 1  # +1 for the newline character
+                    
+                    if not found:
+                        logger.warning("Fingerprint not found on page (even with whitespace handling), skipping event.", 
+                                     fingerprint=event.fingerprint, stripped=stripped_fingerprint, page=page_num)
+                        continue
+                
                 located_events.append({"event": event, "index": index})
             except Exception as e:
                 logger.error("Error finding fingerprint", fingerprint=event.fingerprint, page=page_num, error=e)

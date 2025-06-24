@@ -25,8 +25,8 @@ class OpenAIAdapter(LLMAdapter):
 
         self.config = config
         # API key is read from the OPENAI_API_KEY environment variable by default
-        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.async_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.client = OpenAI(api_key=os.getenv("GOOGLE_API_KEY"))
+        self.async_client = AsyncOpenAI(api_key=os.getenv("GOOGLE_API_KEY"),base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
 
     def generate(self, system_prompt: str, user_prompt: str, *, max_tokens: int, temperature: float) -> str:
         """Generates a synchronous response from the OpenAI API."""

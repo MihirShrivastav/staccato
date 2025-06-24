@@ -9,7 +9,7 @@ class LLMConfig(BaseSettings):
         description="The LLM provider to use."
     )
     model_name: str = Field(
-        default="gpt-4.1-mini",
+        default="gemini-2.5-flash",
         description="The specific model name to use for chunking."
     )
     temperature: float = Field(
@@ -19,6 +19,11 @@ class LLMConfig(BaseSettings):
     max_tokens: int = Field(
         default=16384,
         description="The maximum number of tokens to generate."
+    )
+
+    reasoning_effort: Literal["low", "medium", "high", None] = Field(
+        default=None,
+        description="The reasoning effort to use for the LLM."
     )
 
 class RetryConfig(BaseSettings):
