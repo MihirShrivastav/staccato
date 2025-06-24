@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "staccato"
 version = "0.1.0"
 authors = [
-  { name="Staccato AI", email="contact@staccato.ai" },
+  { name="Mihir Shrivastava", email="mihirshriv@gmail.com" },
 ]
 description = "An advanced, structure-aware chunking engine for RAG pipelines."
 readme = "README.md"
@@ -20,7 +20,11 @@ classifiers = [
 ]
 dependencies = [
     "pydantic>=2.0",
+    "pydantic-settings",
+    "python-dotenv",
     "structlog>=24.0",
+    "tenacity",
+    "toml",
 ]
 
 [project.urls]
@@ -30,13 +34,24 @@ dependencies = [
 [project.optional-dependencies]
 pdfplumber = ["pdfplumber>=0.10.0"]
 pymupdf = ["PyMuPDF>=1.24.0"]
+pymupdf4llm = ["pymupdf4llm>=0.0.9"]
 pypdf = ["pypdf>=4.0.0"]
 docx = ["python-docx>=1.1.0"]
 openai = ["openai>=1.12.0", "httpx>=0.27.0"]
 all = [
     "staccato[pdfplumber]",
     "staccato[pymupdf]",
+    "staccato[pymupdf4llm]",
     "staccato[pypdf]",
     "staccato[docx]",
     "staccato[openai]",
-] 
+]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "black",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"] 

@@ -130,3 +130,4 @@ venv.bak/
 *.swp
 *.swo
 *~
+tests
