@@ -69,7 +69,8 @@ class ChunkingEngine:
                 system_prompt=SYSTEM_PROMPT,
                 user_prompt=user_prompt,
                 max_tokens=self.config.llm.max_tokens,
-                temperature=self.config.llm.temperature
+                temperature=self.config.llm.temperature,
+                reasoning_effort=self.config.llm.reasoning_effort
             )
             
             stitcher.process_events(llm_response, page_content_map)

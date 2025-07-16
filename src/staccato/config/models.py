@@ -4,21 +4,29 @@ from typing import Literal
 
 class LLMConfig(BaseSettings):
     """Configuration for the Language Model provider."""
-    provider: Literal["openai", "mock"] = Field(
+    provider: Literal["openai", "google"] = Field(
         default="openai",
         description="The LLM provider to use."
     )
     model_name: str = Field(
-        default="gemini-2.5-flash",
+        default="gpt-4.1-mini",
         description="The specific model name to use for chunking."
     )
     temperature: float = Field(
-        default=0.7,
+        default=0.5,
         description="The sampling temperature for the LLM."
     )
     max_tokens: int = Field(
         default=16384,
         description="The maximum number of tokens to generate."
+    )
+    base_url: str | None = Field(
+        default=None,
+        description="Custom base URL for the LLM API. If not provided, uses provider defaults."
+    )
+    api_key_env_var: str | None = Field(
+        default=None,
+        description="Environment variable name for the API key. If not provided, uses provider defaults."
     )
 
     reasoning_effort: Literal["low", "medium", "high", None] = Field(

@@ -4,6 +4,8 @@ from .validation import LLMResponse
 from ..config import RetryConfig
 from ..utils.logging import get_llm_logger
 from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
+from typing import Literal
+from typing import Literal
 
 class LLMAdapter(ABC):
     """
@@ -37,7 +39,7 @@ class LLMAdapter(ABC):
 
     # --- Synchronous Methods ---
 
-    def generate_and_validate(self, system_prompt: str, user_prompt: str, *, max_tokens: int, temperature: float) -> LLMResponse:
+    def generate_and_validate(self, system_prompt: str, user_prompt: str, *, max_tokens: int, temperature: float, reasoning_effort: Literal["low", "medium", "high", None] = None) -> LLMResponse:
         """
         Generates a response and validates it against the expected Pydantic model.
         This is the primary method that should be used by the engine.

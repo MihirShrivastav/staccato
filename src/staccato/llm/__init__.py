@@ -19,10 +19,7 @@ def get_llm_adapter(config: ChunkingEngineConfig) -> LLMAdapter:
         An instance of an LLMAdapter subclass.
     """
     provider = config.llm.provider
-    if provider == "mock":
-        from .mock import MockLLMAdapter
-        return MockLLMAdapter(config.retry)
-    elif provider == "openai":
+    if provider in ["openai", "google"]:
         from .openai import OpenAIAdapter
         return OpenAIAdapter(config.llm, config.retry)
     # Add other providers here as they are implemented

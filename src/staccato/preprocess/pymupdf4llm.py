@@ -189,7 +189,7 @@ class PyMuPdf4LlmPreProcessor(PreProcessor):
         # Add image metadata blocks
         for image in images:
             bbox = image.get('bbox', (0, current_y, 500, current_y + 20))
-            metadata_text = f"[IMAGE: {image.get('width', 0)}×{image.get('height', 0)}]"
+            metadata_text = f"[IMAGE: {image.get('width', 0)}x{image.get('height', 0)}]"
             
             metadata_blocks.append(
                 Block(
