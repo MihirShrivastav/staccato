@@ -1,8 +1,9 @@
 import importlib.util
 import os
-from ..llm.base import LLMAdapter
+from ..llm.base import LLMAdapter, TokenUsage
 from ..config import LLMConfig
 from ..config import RetryConfig
+from .response_schema import get_response_format
 
 # A helper to provide a better error message if the required libraries are not installed.
 def _check_openai_dependencies():
@@ -15,7 +16,7 @@ def _check_openai_dependencies():
 class OpenAIAdapter(LLMAdapter):
     """
     An adapter for interacting with OpenAI-compatible APIs.
-    It supports both OpenAI and Google (via OpenAI-compatible endpoint).
+    It supports OpenAI, Google (via OpenAI-compatible endpoint), and LM Studio.
     Supports both synchronous and asynchronous generation.
     """
     def __init__(self, config: LLMConfig, retry_config: RetryConfig = None):
@@ -26,11 +27,14 @@ class OpenAIAdapter(LLMAdapter):
 
         self.config = config
 
-        # Determine API key environment variable
+        # Determine API key environment variable and get API key
         api_key_env_var = self._get_api_key_env_var()
         api_key = os.getenv(api_key_env_var)
 
-        if not api_key:
+        # For LM Studio, use default API key if not provided in environment
+        if not api_key and self.config.provider == "lmstudio":
+            api_key = "lm-studio"
+        elif not api_key:
             raise ValueError(f"API key not found in environment variable: {api_key_env_var}")
 
         # Determine base URL
@@ -59,6 +63,8 @@ class OpenAIAdapter(LLMAdapter):
         # Provider-specific defaults
         if self.config.provider == "google":
             return "GOOGLE_API_KEY"
+        elif self.config.provider == "lmstudio":
+            return "LMSTUDIO_API_KEY"
         else:  # openai
             return "OPENAI_API_KEY"
 
@@ -70,36 +76,76 @@ class OpenAIAdapter(LLMAdapter):
         # Provider-specific defaults
         if self.config.provider == "google":
             return "https://generativelanguage.googleapis.com/v1beta/openai/"
+        elif self.config.provider == "lmstudio":
+            return "http://localhost:1234/v1"
         else:  # openai
             return None  # Use OpenAI's default
 
-    def generate(self, system_prompt: str, user_prompt: str, *, max_tokens: int, temperature: float) -> str:
-        """Generates a synchronous response from the OpenAI API."""
-        response = self.client.chat.completions.create(
-            model=self.config.model_name,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            max_tokens=max_tokens,
-            temperature=temperature,
-            response_format={"type": "json_object"},
-        )
-        return response.choices[0].message.content or ""
+    def _get_response_format(self) -> dict:
+        """Get the appropriate response format for the current provider."""
+        return get_response_format(self.config.provider)
 
-    async def agenerate(self, system_prompt: str, user_prompt: str, *, max_tokens: int, temperature: float) -> str:
-        """Generates an asynchronous response from the OpenAI API."""
-        response = await self.async_client.chat.completions.create(
-            model=self.config.model_name,
-            messages=[
+    def _extract_token_usage(self, response) -> TokenUsage:
+        """Extract token usage from OpenAI API response."""
+        if hasattr(response, 'usage') and response.usage:
+            return TokenUsage(
+                input_tokens=getattr(response.usage, 'prompt_tokens', 0),
+                output_tokens=getattr(response.usage, 'completion_tokens', 0),
+                total_tokens=getattr(response.usage, 'total_tokens', 0)
+            )
+        else:
+            # Fallback: estimate tokens if usage not available
+            return TokenUsage(input_tokens=0, output_tokens=0, total_tokens=0)
+
+    def generate(self, system_prompt: str, user_prompt: str, *, max_tokens: int, temperature: float, reasoning_effort: str = None) -> tuple[str, TokenUsage]:
+        """Generates a synchronous response from the OpenAI API."""
+        # Build the request parameters
+        request_params = {
+            "model": self.config.model_name,
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=max_tokens,
-            temperature=temperature,
-            response_format={"type": "json_object"},
-        )
-        return response.choices[0].message.content or ""
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "response_format": {'type': "json_object"}
+        }
+
+        # Add reasoning_effort if supported by the model and provider
+        if reasoning_effort:
+            request_params["reasoning_effort"] = reasoning_effort
+
+        response = self.client.chat.completions.create(**request_params)
+
+        # Extract token usage
+        usage = self._extract_token_usage(response)
+
+        return response.choices[0].message.content or "", usage
+
+    async def agenerate(self, system_prompt: str, user_prompt: str, *, max_tokens: int, temperature: float, reasoning_effort: str = None) -> tuple[str, TokenUsage]:
+        """Generates an asynchronous response from the OpenAI API."""
+        # Build the request parameters
+        request_params = {
+            "model": self.config.model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "response_format": {'type': "json_object"}
+        }
+
+        # Add reasoning_effort if supported by the model and provider
+        if reasoning_effort:
+            request_params["reasoning_effort"] = reasoning_effort
+
+        response = await self.async_client.chat.completions.create(**request_params)
+
+        # Extract token usage
+        usage = self._extract_token_usage(response)
+
+        return response.choices[0].message.content or "", usage
 
     def count_tokens(self, text: str) -> int:
         """Counts tokens using the model-specific tiktoken tokenizer."""

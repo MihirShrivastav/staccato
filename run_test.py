@@ -5,6 +5,7 @@ from typing import List
 from staccato import (
     ChunkingEngine,
     ChunkingEngineConfig,
+    LLMConfig,
     PreprocessingConfig,
     Chunk,
     setup_logging,
@@ -13,7 +14,7 @@ from staccato import (
 
 # --- Configuration ---
 LOG_LEVEL = "DEBUG"
-DOCUMENT_PATH = "testfile.pdf"
+DOCUMENT_PATH = "29636-Article Text-33690-1-2-20240324.pdf"
 OUTPUT_DIR = "output"
 LOG_FILE = os.path.join(OUTPUT_DIR, "run.log")
 LLM_LOG_FILE = os.path.join(OUTPUT_DIR, "llm_outputs.log")
@@ -60,9 +61,16 @@ async def main():
     config = ChunkingEngineConfig(
         preprocessing=PreprocessingConfig(
             use_layout_analysis=False,
-            page_batch_size=3,
-            pdf_processor="pymupdf4llm"
-        )
+            page_batch_size=2,
+            pdf_processor="pymupdf4llm",
+
+        ),
+        llm=LLMConfig(
+            provider="google", 
+            model_name="gemini-2.5-flash",
+            temperature=0.5
+        ) 
+        
     )
     logging.info(f"Layout analysis disabled via programmatic config.")
 

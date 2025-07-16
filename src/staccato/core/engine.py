@@ -49,7 +49,7 @@ class ChunkingEngine:
         for i in range(0, len(pages), batch_size):
             batch_pages = pages[i:i + batch_size]
             page_numbers = list(range(i + 1, i + len(batch_pages) + 1))
-            logger.info(f"Processing page batch {i//batch_size + 1}: pages {page_numbers[0]}-{page_numbers[-1]}")
+            logger.info(f"\n📄 Processing page batch {i//batch_size + 1}: pages {page_numbers[0]}-{page_numbers[-1]}")
 
             # Create a map of page number to page content for the stitcher
             page_content_map = {
@@ -82,6 +82,11 @@ class ChunkingEngine:
         final_chunks = assembler.assemble(completed_chunks, doc_name)
 
         logger.info(f"Successfully generated {len(final_chunks)} async chunks.")
+
+        # Log final token usage summary
+        token_summary = self.llm_adapter.get_token_usage_summary()
+        logger.info(f"Document processing complete. Token usage summary: {token_summary}")
+
         return final_chunks
 
     def _construct_user_prompt(self, page_content: str, active_stack: List, page_numbers: List[int]) -> str:

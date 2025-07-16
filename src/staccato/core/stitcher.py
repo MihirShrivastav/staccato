@@ -33,25 +33,38 @@ class StatefulStitcher:
 
     def _process_page_events(self, page_num: int, events: List[Event], page_content: str):
         """Processes all events for a single page."""
-        
-        # --- 1. Locate and sort all fingerprints on the page ---
-        located_events = []
+
+        # --- 1. Separate CONTINUATION events from events that need fingerprint location ---
+        continuation_events = []
+        location_events = []
+
         for event in events:
+            if event.event == "CONTINUATION":
+                # CONTINUATION events don't need fingerprint location - they just indicate
+                # that the current active chunk continues across this page
+                continuation_events.append(event)
+                logger.debug("\nCONTINUATION event", level=event.level, page=page_num)
+            else:
+                location_events.append(event)
+
+        # --- 2. Locate and sort fingerprints for STARTS/ENDS events ---
+        located_events = []
+        for event in location_events:
             # The LLM can sometimes return placeholder events with no content.
             if not event.fingerprint:
-                logger.warning("Event missing fingerprint, skipping.", event_data=event.model_dump_json())
+                logger.warning("\n⚠️ Event missing fingerprint, skipping.", event_data=event.model_dump_json())
                 continue
-            
+
             try:
                 # Strip whitespace from fingerprint for more robust matching
                 stripped_fingerprint = event.fingerprint.strip()
                 if not stripped_fingerprint:
-                    logger.warning("Empty fingerprint after stripping, skipping.", event_data=event.model_dump_json())
+                    logger.warning("\n⚠️ Empty fingerprint after stripping, skipping.", event_data=event.model_dump_json())
                     continue
-                
+
                 # First try exact match
                 index = page_content.find(event.fingerprint)
-                
+
                 # If exact match fails, try with stripped versions
                 if index == -1:
                     # Create a stripped version of page content and search in chunks
@@ -59,14 +72,14 @@ class StatefulStitcher:
                     lines = page_content.split('\n')
                     current_pos = 0
                     found = False
-                    
+
                     for line in lines:
                         stripped_line = line.strip()
                         if stripped_fingerprint in stripped_line:
                             # Find the position within the original line
                             line_start_in_content = current_pos
                             stripped_index_in_line = stripped_line.find(stripped_fingerprint)
-                            
+
                             # Map back to original content position
                             # Count non-stripped characters before the match
                             original_index_in_line = 0
@@ -77,25 +90,31 @@ class StatefulStitcher:
                                         break
                                     stripped_chars_counted += 1
                                 original_index_in_line += 1
-                            
+
                             index = line_start_in_content + original_index_in_line
                             found = True
                             break
                         current_pos += len(line) + 1  # +1 for the newline character
-                    
+
                     if not found:
-                        logger.warning("Fingerprint not found on page (even with whitespace handling), skipping event.", 
+                        logger.warning("Fingerprint not found on page (even with whitespace handling), skipping event.",
                                      fingerprint=event.fingerprint, stripped=stripped_fingerprint, page=page_num)
                         continue
-                
+
                 located_events.append({"event": event, "index": index})
             except Exception as e:
                 logger.error("Error finding fingerprint", fingerprint=event.fingerprint, page=page_num, error=e)
-        
+
         # Sort events by their appearance on the page
         located_events.sort(key=lambda x: x["index"])
 
-        # --- 2. Process events sequentially, slicing text between fingerprints ---
+        # --- 3. Process CONTINUATION events (they don't affect text slicing) ---
+        for event in continuation_events:
+            # CONTINUATION events just indicate that the active chunk continues
+            # No text slicing or state changes needed
+            pass
+
+        # --- 4. Process located events sequentially, slicing text between fingerprints ---
         last_index = 0
         for i, located in enumerate(located_events):
             current_event = located["event"]
@@ -117,12 +136,8 @@ class StatefulStitcher:
                 self._handle_ends(current_event)
                 # For ENDS events, the fingerprint marks the boundary, so don't include it
                 last_index = current_index
-            elif current_event.event == "CONTINUATION":
-                # Continuation just means the active chunk continues, no state change.
-                # The text was already added.
-                last_index = current_index
 
-        # Add the remaining text on the page to the currently active chunk
+        # --- 5. Add the remaining text on the page to the currently active chunk ---
         if self.active_stack:
             self.active_stack[-1].text_content += page_content[last_index:]
 
@@ -140,7 +155,7 @@ class StatefulStitcher:
         # The content for this new chunk will start accumulating from this point.
         new_chunk.text_content = event.fingerprint
         self.active_stack.append(new_chunk)
-        logger.debug("Started new chunk", level=event.level, title=event.title, page=event.page_number)
+        logger.debug("\n🆕 Started chunk", level=event.level, title=event.title, page=event.page_number)
 
     def _handle_ends(self, event: Event):
         """Handles an ENDS event by finalizing a chunk and moving it to completed."""
@@ -157,7 +172,7 @@ class StatefulStitcher:
             end_page=event.page_number
         )
         self.completed_chunks.append(completed)
-        logger.debug("Completed chunk", level=completed.level, title=completed.title, page=event.page_number)
+        logger.debug("\n✅ Completed chunk", level=completed.level, title=completed.title, page=event.page_number)
 
     def finalize(self) -> List[CompletedChunk]:
         """Finalizes any remaining open chunks on the stack."""
