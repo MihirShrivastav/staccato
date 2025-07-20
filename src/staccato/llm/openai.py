@@ -65,6 +65,8 @@ class OpenAIAdapter(LLMAdapter):
             return "GOOGLE_API_KEY"
         elif self.config.provider == "lmstudio":
             return "LMSTUDIO_API_KEY"
+        elif self.config.provider == "groq":
+            return "GROQ_API_KEY"
         else:  # openai
             return "OPENAI_API_KEY"
 
@@ -78,6 +80,8 @@ class OpenAIAdapter(LLMAdapter):
             return "https://generativelanguage.googleapis.com/v1beta/openai/"
         elif self.config.provider == "lmstudio":
             return "http://localhost:1234/v1"
+        elif self.config.provider == "groq":
+            return "https://api.groq.com/openai/v1"
         else:  # openai
             return None  # Use OpenAI's default
 
@@ -90,6 +94,7 @@ class OpenAIAdapter(LLMAdapter):
         if hasattr(response, 'usage') and response.usage:
             return TokenUsage(
                 input_tokens=getattr(response.usage, 'prompt_tokens', 0),
+                #input_cached_tokens = getattr(response.usage.prompt_tokens_details, 'cached_tokens', 0),
                 output_tokens=getattr(response.usage, 'completion_tokens', 0),
                 total_tokens=getattr(response.usage, 'total_tokens', 0)
             )
@@ -106,7 +111,6 @@ class OpenAIAdapter(LLMAdapter):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            "max_tokens": max_tokens,
             "temperature": temperature,
             "response_format": {'type': "json_object"}
         }
@@ -131,7 +135,6 @@ class OpenAIAdapter(LLMAdapter):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            "max_tokens": max_tokens,
             "temperature": temperature,
             "response_format": {'type': "json_object"}
         }

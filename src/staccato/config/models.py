@@ -4,7 +4,7 @@ from typing import Literal
 
 class LLMConfig(BaseSettings):
     """Configuration for the Language Model provider."""
-    provider: Literal["openai", "google", "lmstudio"] = Field(
+    provider: Literal["openai", "google", "lmstudio", "groq"] = Field(
         default="openai",
         description="The LLM provider to use."
     )
