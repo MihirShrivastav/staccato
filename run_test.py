@@ -68,7 +68,7 @@ async def main():
         llm=LLMConfig(
             provider="google", 
             model_name="gemini-2.5-flash",
-            temperature="0.5",
+            temperature="0.7",
             reasoning_effort="low"
         ) 
         

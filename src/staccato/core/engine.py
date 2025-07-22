@@ -3,6 +3,7 @@ import json
 from typing import List
 from ..config import ChunkingEngineConfig
 from ..llm import get_llm_adapter
+from ..llm.validation import validate_page_numbers, PageNumberValidationError
 from ..preprocess.factory import get_preprocessor
 from ..preprocess.markup import convert_page_to_markdown
 from .stitcher import StatefulStitcher
@@ -65,14 +66,42 @@ class ChunkingEngine:
             combined_page_content = "\n\n".join(page_contents)
 
             user_prompt = self._construct_user_prompt(combined_page_content, stitcher.active_stack, page_numbers)
-            llm_response = await self.llm_adapter.agenerate_and_validate(
-                system_prompt=SYSTEM_PROMPT,
-                user_prompt=user_prompt,
-                max_tokens=self.config.llm.max_tokens,
-                temperature=self.config.llm.temperature,
-                reasoning_effort=self.config.llm.reasoning_effort
-            )
-            
+
+            # Retry logic for page number validation
+            max_page_validation_retries = self.config.retry.page_validation_attempts
+            llm_response = None
+
+            for retry_attempt in range(max_page_validation_retries):
+                try:
+                    llm_response = await self.llm_adapter.agenerate_and_validate(
+                        system_prompt=SYSTEM_PROMPT,
+                        user_prompt=user_prompt,
+                        max_tokens=self.config.llm.max_tokens,
+                        temperature=self.config.llm.temperature,
+                        reasoning_effort=self.config.llm.reasoning_effort
+                    )
+
+                    # Validate page numbers
+                    validate_page_numbers(llm_response, page_numbers)
+                    break  # Success, exit retry loop
+
+                except PageNumberValidationError as e:
+                    logger.warning(f"Page validation failed on attempt {retry_attempt + 1}: {e}")
+
+                    if retry_attempt == max_page_validation_retries - 1:
+                        logger.error(f"Page validation failed after {max_page_validation_retries} attempts")
+                        raise
+
+                    # Add corrective instructions to the user prompt for retry
+                    min_page, max_page = e.valid_range
+                    correction_text = (
+                        f"\n\nIMPORTANT CORRECTION: Your previous response contained invalid page numbers: {e.invalid_pages}. "
+                        f"You must ONLY use page numbers {min_page} through {max_page} (inclusive). "
+                        f"Do not reference any page numbers outside this range."
+                    )
+                    user_prompt = user_prompt + correction_text
+                    logger.info(f"Retrying with page range correction: pages {min_page}-{max_page}")
+
             stitcher.process_events(llm_response, page_content_map)
             
         completed_chunks = stitcher.finalize()

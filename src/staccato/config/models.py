@@ -43,6 +43,10 @@ class RetryConfig(BaseSettings):
     min_wait: int = Field(default=1, description="The initial wait time in seconds.")
     max_wait: int = Field(default=10, description="The maximum wait time in seconds.")
     wait_multiplier: int = Field(default=2, description="The multiplier for exponential backoff.")
+    page_validation_attempts: int = Field(
+        default=3,
+        description="The maximum number of times to retry when LLM returns invalid page numbers."
+    )
 
 class PreprocessingConfig(BaseSettings):
     """Configuration for the pre-processing stage."""
