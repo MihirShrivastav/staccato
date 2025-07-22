@@ -120,22 +120,31 @@ class StatefulStitcher:
             current_event = located["event"]
             current_index = located["index"]
 
-            # Determine the text slice for the *previous* state
-            # The text for the previous active chunk ends where the current event's fingerprint begins.
-            text_slice = page_content[last_index:current_index]
-            if self.active_stack:
-                self.active_stack[-1].text_content += text_slice
-
             # Now, process the current event
             if current_event.event == "STARTS":
+                # For STARTS events, add text up to the fingerprint to the previous chunk
+                text_slice = page_content[last_index:current_index]
+                if self.active_stack:
+                    self.active_stack[-1].text_content += text_slice
+
                 self._handle_starts(current_event)
                 # For STARTS events, update last_index to point AFTER the fingerprint
                 # to avoid including the fingerprint text twice
                 last_index = current_index + len(current_event.fingerprint)
             elif current_event.event == "ENDS":
+                # For ENDS events, the fingerprint contains the last few words of the chunk being ended
+                # So we include text up to and including the fingerprint in the current chunk
+                fingerprint_end_index = current_index + len(current_event.fingerprint)
+                text_slice = page_content[last_index:fingerprint_end_index]
+                if self.active_stack:
+                    self.active_stack[-1].text_content += text_slice
+
+                # Check for gap between this ENDS and the next STARTS event
+                self._check_and_fix_gap_after_ends(i, located_events, page_content, fingerprint_end_index, page_num)
+
                 self._handle_ends(current_event)
-                # For ENDS events, the fingerprint marks the boundary, so don't include it
-                last_index = current_index
+                # Set last_index to after the fingerprint for the next iteration
+                last_index = fingerprint_end_index
 
         # --- 5. Add the remaining text on the page to the currently active chunk ---
         if self.active_stack:
@@ -162,9 +171,9 @@ class StatefulStitcher:
         if not self.active_stack:
             logger.warning("Received ENDS event with no active chunk.", event_data=event.model_dump_json())
             return
-        
-        # The fingerprint of the ENDS event marks the end of the chunk's content.
-        # The text slice up to this point was already added.
+
+        # The fingerprint of the ENDS event contains the last few words of the chunk being ended.
+        # The text slice including the fingerprint was already added to the chunk.
         active_chunk = self.active_stack.pop()
         
         completed = CompletedChunk(
@@ -173,6 +182,42 @@ class StatefulStitcher:
         )
         self.completed_chunks.append(completed)
         logger.debug("\n✅ Completed chunk", level=completed.level, title=completed.title, page=event.page_number)
+
+    def _check_and_fix_gap_after_ends(self, current_index: int, located_events: list, page_content: str, ends_fingerprint_end: int, page_num: int):
+        """
+        Checks if there's a gap between an ENDS event and the next STARTS event,
+        and adds any missing text to the most recently completed chunk.
+        """
+        # Look for the next STARTS event
+        next_starts_event = None
+        next_starts_index = None
+
+        for j in range(current_index + 1, len(located_events)):
+            next_event = located_events[j]
+            if next_event["event"].event == "STARTS":
+                next_starts_event = next_event["event"]
+                next_starts_index = next_event["index"]
+                break
+
+        if next_starts_event and next_starts_index is not None:
+            # Check if there's text between the end of ENDS fingerprint and start of STARTS fingerprint
+            gap_text = page_content[ends_fingerprint_end:next_starts_index]
+
+            # Only consider it a gap if there's meaningful content (not just whitespace)
+            if gap_text.strip():
+                logger.warning(
+                    f"\n⚠️ Gap detected between ENDS and STARTS events on page {page_num}",
+                    gap_text=repr(gap_text.strip()),
+                    ends_event=self.active_stack[-1].title if self.active_stack else "Unknown",
+                    starts_event=next_starts_event.title
+                )
+
+                # Add the gap text to the current active chunk (which will be completed by the ENDS event)
+                if self.active_stack:
+                    self.active_stack[-1].text_content += gap_text
+                    logger.info(
+                        f"✅ Added gap text to chunk '{self.active_stack[-1].title}': {repr(gap_text.strip())}"
+                    )
 
     def finalize(self) -> List[CompletedChunk]:
         """Finalizes any remaining open chunks on the stack."""

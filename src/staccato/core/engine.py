@@ -3,7 +3,7 @@ import json
 from typing import List
 from ..config import ChunkingEngineConfig
 from ..llm import get_llm_adapter
-from ..llm.validation import validate_page_numbers, PageNumberValidationError
+from ..llm.validation import validate_page_numbers, PageNumberValidationError, validate_fingerprints, FingerprintValidationError
 from ..preprocess.factory import get_preprocessor
 from ..preprocess.markup import convert_page_to_markdown
 from .stitcher import StatefulStitcher
@@ -58,12 +58,14 @@ class ChunkingEngine:
                 for page_num, p in zip(page_numbers, batch_pages)
             }
 
-            # Combine page content for the batch, inserting page break markers
+            # Combine page content for the batch, inserting clear page headers
             page_contents = []
             for page_num, content in page_content_map.items():
-                page_contents.append(f"[PAGE BREAK {page_num}]\n{content}")
-            
-            combined_page_content = "\n\n".join(page_contents)
+                page_header = f"THIS IS PAGE NUMBER {page_num}"
+                separator_line = "=" * len(page_header)
+                page_contents.append(f"{separator_line}\n{page_header}\n{separator_line}\n\n{content}")
+
+            combined_page_content = "\n\n\n".join(page_contents)
 
             user_prompt = self._construct_user_prompt(combined_page_content, stitcher.active_stack, page_numbers)
 
@@ -83,6 +85,9 @@ class ChunkingEngine:
 
                     # Validate page numbers
                     validate_page_numbers(llm_response, page_numbers)
+
+                    # Validate fingerprints
+                    validate_fingerprints(llm_response, page_content_map)
                     break  # Success, exit retry loop
 
                 except PageNumberValidationError as e:
@@ -101,6 +106,24 @@ class ChunkingEngine:
                     )
                     user_prompt = user_prompt + correction_text
                     logger.info(f"Retrying with page range correction: pages {min_page}-{max_page}")
+
+                except FingerprintValidationError as e:
+                    logger.warning(f"Fingerprint validation failed on attempt {retry_attempt + 1}: {e}")
+
+                    if retry_attempt == max_page_validation_retries - 1:
+                        logger.error(f"Fingerprint validation failed after {max_page_validation_retries} attempts")
+                        raise
+
+                    # Add corrective instructions for fingerprint issues
+                    missing_fingerprints = [item["fingerprint"] for item in e.missing_fingerprints]
+                    correction_text = (
+                        f"\n\nIMPORTANT CORRECTION: Your previous response contained fingerprints that could not be found in the page content: {missing_fingerprints}. "
+                        f"Please check that you are copying the exact text from the document. "
+                        f"Try using fewer words (2-3 words maximum) or check for typos in your fingerprints. "
+                        f"The fingerprint must appear exactly as written in the page content."
+                    )
+                    user_prompt = user_prompt + correction_text
+                    logger.info(f"Retrying with fingerprint correction for missing: {missing_fingerprints}")
 
             stitcher.process_events(llm_response, page_content_map)
             
